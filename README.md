@@ -23,22 +23,19 @@ This Python package is distributed using the pip package manager. Install it wit
 -->
 ```mermaid
 flowchart TD
-   A[Input Preparation and Cleaning] --> B[Baseline Calculation and Apply forward_process]
-   B --> C1{Single-Variable Perturbation?}
-   C1 -- Yes --> D1[Generate n Univariate Perturbations for each input variable]
-   C1 -- No  --> D2[Generate n Multivariate Perturbations for all input variables]
-   D1 --> E1[Replicate Input Rows and Add Perturbations]
-   D2 --> E2[Replicate Input Rows and Add Joint Perturbations]
-   E1 --> F[Model Evaluation and Apply forward_process to perturbed inputs]
-   E2 --> F
-   F --> G[Effect Calculation Differences and Normalization]
-   G --> H[Result Compilation DataFrame of all results]
-   H --> I[Systematic Sensitivity Analysis Repeat for all variable pairs or jointly]
-   I --> J[Sensitivity Metrics Calculation Pearson R2 Mean Change]
-   J --> K[Output and Interpretation]
-```
-   I --> J[Sensitivity Metrics Calculation<br>(Pearson, R², Mean Change)]
-   J --> K[Output & Interpretation]
+    A[Input Preparation and Cleaning] --> B[Baseline Calculation and Apply forward_process]
+    B --> C1{Single-Variable Perturbation?}
+    C1 -- Yes --> D1[Generate n Univariate Perturbations for each input variable]
+    C1 -- No  --> D2[Generate n Multivariate Perturbations for all input variables]
+    D1 --> E1[Replicate Input Rows and Add Perturbations]
+    D2 --> E2[Replicate Input Rows and Add Joint Perturbations]
+    E1 --> F[Model Evaluation and Apply forward_process to perturbed inputs]
+    E2 --> F
+    F --> G[Effect Calculation Differences and Normalization]
+    G --> H[Result Compilation DataFrame of all results]
+    H --> I[Systematic Sensitivity Analysis Repeat for all variable pairs or jointly]
+    I --> J[Sensitivity Metrics Calculation Pearson R2 Mean Change]
+    J --> K[Output and Interpretation]
 ```
 
 The `monte-carlo-sensitivity` package provides a robust, simulation-based framework for quantifying the sensitivity of model outputs to input variables using Monte Carlo perturbation and statistical analysis. The methodology supports both single-variable and joint (multi-variable) perturbation workflows.
