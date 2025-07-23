@@ -16,8 +16,6 @@ NASA Jet Propulsion Laboratory 398L
 
 This Python package is distributed using the pip package manager. Install it with the package name `monte-carlo-sensitivity` with dashes.
 
-(Apply forward_process)]
-
 <!--
    The following Mermaid diagram is compatible with GitHub rendering. If you do not see the diagram, ensure you are viewing this file on GitHub.com and that Mermaid diagrams are supported in your environment.
 -->
