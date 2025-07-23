@@ -1,3 +1,4 @@
+
 # `monte-carlo-sensitivity` 
 
 Monte-Carlo Sensitivity Analysis Python Package
@@ -35,6 +36,28 @@ flowchart TD
     I --> J[Sensitivity Metrics Calculation Pearson R2 Mean Change]
     J --> K[Output and Interpretation]
 ```
+
+
+## Scientific Background
+
+Monte Carlo sensitivity analysis is a widely used approach for quantifying the influence of input uncertainties on model outputs. By repeatedly perturbing input variables and observing the resulting changes in outputs, this method provides robust estimates of sensitivity metrics, even for nonlinear or complex models [1,2].
+
+This package implements both univariate and multivariate perturbation strategies, following best practices in uncertainty quantification and sensitivity analysis [3,4].
+
+### References
+
+1. Saltelli, A., et al. (2008). Global Sensitivity Analysis: The Primer. Wiley.
+2. Helton, J.C., & Davis, F.J. (2003). Latin hypercube sampling and the propagation of uncertainty in analyses of complex systems. Reliability Engineering & System Safety, 81(1), 23-69.
+3. Iooss, B., & Lemaître, P. (2015). A review on global sensitivity analysis methods. In Uncertainty management in Simulation-Optimization of Complex Systems (pp. 101-122). Springer.
+4. Pianosi, F., et al. (2016). Sensitivity analysis of environmental models: A systematic review with practical workflow. Environmental Modelling & Software, 79, 214-232.
+
+---
+
+## Comparison to Other Tools
+
+While packages such as [SALib](https://salib.readthedocs.io/) provide a range of sensitivity analysis methods, `monte-carlo-sensitivity` focuses on flexible, simulation-based perturbation workflows that are easy to integrate with arbitrary models and data pipelines.
+
+---
 
 The `monte-carlo-sensitivity` package provides a robust, simulation-based framework for quantifying the sensitivity of model outputs to input variables using Monte Carlo perturbation and statistical analysis. The methodology supports both single-variable and joint (multi-variable) perturbation workflows.
 
