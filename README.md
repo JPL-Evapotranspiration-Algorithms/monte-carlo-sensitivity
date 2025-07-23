@@ -23,18 +23,18 @@ This Python package is distributed using the pip package manager. Install it wit
 -->
 ```mermaid
 flowchart TD
-      A[Input Preparation and Cleaning] --> B[Baseline Calculation<br/>(Apply forward_process)]
+      A[Input Preparation and Cleaning] --> B[Baseline Calculation (Apply forward_process)]
       B --> C1{Single-Variable Perturbation?}
-      C1 -- Yes --> D1[Generate n Univariate Perturbations<br/>(For each input variable)]
-      C1 -- No  --> D2[Generate n Multivariate Perturbations<br/>(Joint for all input variables)]
+      C1 -- Yes --> D1[Generate n Univariate Perturbations (For each input variable)]
+      C1 -- No  --> D2[Generate n Multivariate Perturbations (Joint for all input variables)]
       D1 --> E1[Replicate Input Rows and Add Perturbations]
       D2 --> E2[Replicate Input Rows and Add Joint Perturbations]
-      E1 --> F[Model Evaluation<br/>(Apply forward_process to perturbed inputs)]
+      E1 --> F[Model Evaluation (Apply forward_process to perturbed inputs)]
       E2 --> F
-      F --> G[Effect Calculation<br/>(Differences & Normalization)]
-      G --> H[Result Compilation<br/>(DataFrame of all results)]
-      H --> I[Systematic Sensitivity Analysis<br/>(Repeat for all variable pairs or jointly)]
-      I --> J[Sensitivity Metrics Calculation<br/>(Pearson, R², Mean Change)]
+      F --> G[Effect Calculation (Differences & Normalization)]
+      G --> H[Result Compilation (DataFrame of all results)]
+      H --> I[Systematic Sensitivity Analysis (Repeat for all variable pairs or jointly)]
+      I --> J[Sensitivity Metrics Calculation (Pearson, R², Mean Change)]
       J --> K[Output & Interpretation]
 ```
    I --> J[Sensitivity Metrics Calculation<br>(Pearson, R², Mean Change)]
