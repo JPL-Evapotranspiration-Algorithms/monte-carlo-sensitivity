@@ -1,3 +1,4 @@
+
 # `monte-carlo-sensitivity` 
 
 Monte-Carlo Sensitivity Analysis Python Package
@@ -16,13 +17,123 @@ NASA Jet Propulsion Laboratory 398L
 
 This Python package is distributed using the pip package manager. Install it with the package name `monte-carlo-sensitivity` with dashes.
 
+<!--
+   The following Mermaid diagram is compatible with GitHub rendering. If you do not see the diagram, ensure you are viewing this file on GitHub.com and that Mermaid diagrams are supported in your environment.
+-->
+```mermaid
+flowchart TD
+    A[Input Preparation and Cleaning] --> B[Baseline Calculation and Apply forward_process]
+    B --> C1{Single-Variable Perturbation?}
+    C1 -- Yes --> D1[Generate n Univariate Perturbations for each input variable]
+    C1 -- No  --> D2[Generate n Multivariate Perturbations for all input variables]
+    D1 --> E1[Replicate Input Rows and Add Perturbations]
+    D2 --> E2[Replicate Input Rows and Add Joint Perturbations]
+    E1 --> F[Model Evaluation and Apply forward_process to perturbed inputs]
+    E2 --> F
+    F --> G[Effect Calculation Differences and Normalization]
+    G --> H[Result Compilation DataFrame of all results]
+    H --> I[Systematic Sensitivity Analysis Repeat for all variable pairs or jointly]
+    I --> J[Sensitivity Metrics Calculation Pearson R2 Mean Change]
+    J --> K[Output and Interpretation]
 ```
-pip install monte-carlo-sensitivity
-```
+
+
+## Scientific Background
+
+Monte Carlo sensitivity analysis is a widely used approach for quantifying the influence of input uncertainties on model outputs. By repeatedly perturbing input variables and observing the resulting changes in outputs, this method provides robust estimates of sensitivity metrics, even for nonlinear or complex models [1,2].
+
+This package implements both univariate and multivariate perturbation strategies, following best practices in uncertainty quantification and sensitivity analysis [3,4].
+
+### References
+
+1. Saltelli, A., et al. (2008). Global Sensitivity Analysis: The Primer. Wiley.
+2. Helton, J.C., & Davis, F.J. (2003). Latin hypercube sampling and the propagation of uncertainty in analyses of complex systems. Reliability Engineering & System Safety, 81(1), 23-69.
+3. Iooss, B., & Lemaître, P. (2015). A review on global sensitivity analysis methods. In Uncertainty management in Simulation-Optimization of Complex Systems (pp. 101-122). Springer.
+4. Pianosi, F., et al. (2016). Sensitivity analysis of environmental models: A systematic review with practical workflow. Environmental Modelling & Software, 79, 214-232.
+
+---
+
+## Comparison to Other Tools
+
+While packages such as [SALib](https://salib.readthedocs.io/) provide a range of sensitivity analysis methods, `monte-carlo-sensitivity` focuses on flexible, simulation-based perturbation workflows that are easy to integrate with arbitrary models and data pipelines.
+
+---
+
+The `monte-carlo-sensitivity` package provides a robust, simulation-based framework for quantifying the sensitivity of model outputs to input variables using Monte Carlo perturbation and statistical analysis. The methodology supports both single-variable and joint (multi-variable) perturbation workflows.
+
+### 1. Input Preparation and Cleaning
+
+- Start with an input DataFrame (`input_df`) containing all relevant variables.
+- Specify the input variables to perturb and the output variables to analyze. These can be single variables or lists of variables, depending on the function used.
+- Remove rows with missing values (NaNs) as needed to ensure valid analysis.
+
+### 2. Monte Carlo Perturbation of Inputs
+
+#### Single-Variable Perturbation (`perturbed_run`)
+
+For each input variable and output variable pair:
+
+1. **Baseline Calculation:**
+   - Compute the unperturbed output by applying a user-defined model or function (`forward_process`) to the input data.
+
+2. **Perturbation Generation:**
+   - For each row, generate `n` random perturbations for the selected input variable (default: normal distribution, mean zero, std equal to the variable's std).
+   - Replicate each input row `n` times and add the generated perturbations to the selected input variable, creating a set of perturbed inputs.
+
+3. **Model Evaluation:**
+   - Apply the model to the perturbed inputs to obtain perturbed outputs.
+
+4. **Effect Calculation:**
+   - Compute the difference between perturbed and unperturbed values for both input and output.
+   - Normalize these differences (typically by dividing by the standard deviation).
+
+5. **Result Compilation:**
+   - Aggregate the results into a DataFrame, including unperturbed and perturbed values, perturbations, and their normalized forms.
+
+#### Joint (Multivariate) Perturbation (`joint_perturbed_run`)
+
+For joint sensitivity analysis, multiple input variables are perturbed simultaneously, optionally allowing for correlations between them:
+
+1. **Baseline Calculation:**
+   - Compute the unperturbed output using the user-defined `forward_process` function.
+
+2. **Joint Perturbation Generation:**
+   - For each row, generate `n` random perturbation vectors for the selected input variables, using a multivariate distribution (default: multivariate normal with zero mean and diagonal covariance from input stds).
+   - Replicate each input row `n` times and add the generated perturbation vectors to the input variables, creating a set of jointly perturbed inputs.
+
+3. **Model Evaluation:**
+   - Apply the model to the perturbed inputs to obtain perturbed outputs.
+
+4. **Effect Calculation:**
+   - Compute the difference between perturbed and unperturbed values for both input and output variables.
+   - Normalize these differences (typically by dividing by the standard deviation for each variable).
+
+5. **Result Compilation:**
+   - Aggregate the results into a DataFrame, including unperturbed and perturbed values, perturbations, and their normalized forms for all input and output variables.
+
+### 3. Systematic Sensitivity Analysis (Multiple Variables)
+
+- Repeat the above Monte Carlo perturbation process for every combination of input and output variable (single-variable mode), or for all variables jointly (joint mode).
+- Concatenate all results into a comprehensive DataFrame (`perturbation_df`) that records all perturbations and their effects.
+
+### 4. Sensitivity Metrics Calculation
+
+For each input-output variable pair, calculate the following metrics using the normalized perturbations:
+
+- **Pearson Correlation:** Measures the linear relationship between normalized input and output perturbations.
+- **R² (Coefficient of Determination):** Quantifies the proportion of variance in the output explained by the input perturbation (via linear regression).
+- **Mean Normalized Change:** The average normalized change in the output variable due to input perturbation.
+
+These metrics are aggregated into a summary DataFrame (`sensitivity_metrics_df`).
+
+### 5. Output and Interpretation
+
+- The process returns both the detailed perturbation results and the summary sensitivity metrics.
+- This enables a comprehensive, quantitative assessment of how each input variable influences each output variable, supporting robust model evaluation and interpretation.
+
+---
 
 ## Usage
-
-The `monte-carlo-sensitivity` package provides tools for performing sensitivity analysis using Monte Carlo methods. 
 
 Import this package in Python as `monte_carlo_sensitivity` with underscores.
 
@@ -30,7 +141,7 @@ Below are examples of how to use the key functions in the package:
 
 ### Sensitivity Analysis
 
-The `sensitivity_analysis` function performs sensitivity analysis by perturbing input variables and observing the effect on output variables.
+The `sensitivity_analysis` function performs systematic sensitivity analysis by perturbing input variables and observing the effect on output variables.
 
 ```python
 import pandas as pd
@@ -63,9 +174,9 @@ print(sensitivity_metrics)
 
 ### Perturbed Run
 
-The `perturbed_run` function performs a Monte Carlo sensitivity analysis by perturbing an input variable and observing the effect on an output variable.
+The `perturbed_run` function performs a Monte Carlo sensitivity analysis by perturbing a single input variable and observing the effect on a single output variable.
 
-```Python
+```python
 import pandas as pd
 from monte_carlo_sensitivity.perturbed_run import perturbed_run
 
@@ -95,9 +206,9 @@ print(results)
 
 ### Joint Perturbed Run
 
-The `joint_perturbed_run` function evaluates the sensitivity of output variables to joint perturbations in input variables.
+The `joint_perturbed_run` function evaluates the sensitivity of output variables to joint perturbations in multiple input variables.
 
-```Python
+```python
 import pandas as pd
 from monte_carlo_sensitivity.joint_perturbed_run import joint_perturbed_run
 
