@@ -1,4 +1,5 @@
 from typing import Callable
+import logging
 
 import numpy as np
 import pandas as pd
@@ -7,6 +8,8 @@ from .repeat_rows import repeat_rows
 from .divide_by_std import divide_by_std
 
 DEFAULT_NORMALIZATION_FUNCTION = divide_by_std
+
+logger = logging.getLogger(__name__)
 
 def perturbed_run(
         input_df: pd.DataFrame,
@@ -49,8 +52,12 @@ def perturbed_run(
         - "output_perturbation_std": The normalized output perturbations.
         - "output_perturbed": The perturbed output values.
     """
+    logger.info("tarting Monte Carlo perturbed run")
+
+    logger.info(f"calculating standard deviation of input variable: {input_variable}")
     # calculate standard deviation of the input variable
     input_std = np.nanstd(input_df[input_variable])
+    logger.info(f"input variable {input_variable} standard deviation: {input_std}")
 
     if input_std == 0:
         input_std = np.nan
@@ -59,10 +66,15 @@ def perturbed_run(
     if perturbation_std is None:
         perturbation_std = input_std
 
+    logger.info("starting forward process")
     # forward process the unperturbed input
     unperturbed_output_df = forward_process(input_df)
+    logger.info("forward process completed")
+
+    logger.info(f"calculating standard deviation of output variable: {output_variable}")
     # calculate standard deviation of the output variable
     output_std = np.nanstd(unperturbed_output_df[output_variable])
+    logger.info(f"output variable {output_variable} standard deviation: {output_std}")
 
     if output_std == 0:
         output_std = np.nan
@@ -71,11 +83,15 @@ def perturbed_run(
     unperturbed_output = unperturbed_output_df[output_variable]
     # repeat unperturbed output
     unperturbed_output = repeat_rows(unperturbed_output_df, n)[output_variable]
+
+    logger.info("starting input perturbation generation")
     # generate input perturbation
     input_perturbation = np.concatenate([perturbation_process(0, perturbation_std, n) for i in range(len(input_df))])
+    logger.info("input perturbation generation completed")
 
     # input_perturbation_std = input_perturbation / input_std
 
+    logger.info("generating control group")
     # copy input for perturbation
     perturbed_input_df = input_df.copy()
     # repeat input for perturbation
@@ -83,20 +99,27 @@ def perturbed_run(
     # extract input variable from repeated unperturbed input
     unperturbed_input = perturbed_input_df[input_variable]
 
+    logger.info("normalizing input perturbations")
     # normalize input perturbations
     input_perturbation_std = normalization_function(input_perturbation, unperturbed_input)
 
+    logger.info("applying perturbations")
     # add perturbation to input
     perturbed_input_df[input_variable] = perturbed_input_df[input_variable] + input_perturbation
     # extract perturbed input
     perturbed_input = perturbed_input_df[input_variable]
+
+    logger.info("starting forward process for perturbed input")
     # forward process the perturbed input
     perturbed_output_df = forward_process(perturbed_input_df)
+    logger.info("completed forward process for perturbed input")
+
     # extract output variable from perturbed output
     perturbed_output = perturbed_output_df[output_variable]
     # calculate output perturbation
     output_perturbation = perturbed_output - unperturbed_output
 
+    logger.info("normalizing output perturbations")
     # normalize output perturbations
     output_perturbation_std = normalization_function(output_perturbation, unperturbed_output)
 
@@ -115,5 +138,7 @@ def perturbed_run(
 
     if dropna:
         results_df = results_df.dropna()
+
+    logger.info("Monte Carlo run complete")
 
     return results_df
