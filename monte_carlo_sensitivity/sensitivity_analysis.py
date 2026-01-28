@@ -93,6 +93,14 @@ def _sensitivity_analysis_joint(
     # Run forward process ONCE on unperturbed data
     unperturbed_output_df = forward_process(input_df)
     
+    # Coerce outputs to numeric to handle object dtypes
+    for col in output_variables:
+        if col in unperturbed_output_df.columns:
+            unperturbed_output_df[col] = pd.to_numeric(
+                unperturbed_output_df[col],
+                errors='coerce'
+            ).astype(np.float64)
+    
     # Calculate output standard deviations
     output_stds = {}
     for output_variable in output_variables:
@@ -142,6 +150,14 @@ def _sensitivity_analysis_joint(
     
     # Run forward process ONCE on all combined perturbations
     combined_perturbed_output_df = forward_process(combined_perturbed_df)
+    
+    # Coerce outputs to numeric to handle object dtypes
+    for col in output_variables:
+        if col in combined_perturbed_output_df.columns:
+            combined_perturbed_output_df[col] = pd.to_numeric(
+                combined_perturbed_output_df[col],
+                errors='coerce'
+            ).astype(np.float64)
     
     # Split the combined output back into separate results per input variable
     rows_per_scenario = len(input_df) * n
@@ -198,9 +214,25 @@ def _sensitivity_analysis_joint(
             }).dropna()
             
             if len(variable_perturbation_df) > 0:
-                input_pert_std = variable_perturbation_df.input_perturbation_std
-                output_pert_std = variable_perturbation_df.output_perturbation_std
-                correlation = mstats.pearsonr(input_pert_std, output_pert_std)[0]
+                # Coerce to float64 to handle any remaining object dtypes
+                input_pert_std = np.array(pd.to_numeric(
+                    variable_perturbation_df.input_perturbation_std,
+                    errors='coerce'
+                ), dtype=np.float64)
+                output_pert_std = np.array(pd.to_numeric(
+                    variable_perturbation_df.output_perturbation_std,
+                    errors='coerce'
+                ), dtype=np.float64)
+                
+                # Remove NaN values before correlation
+                mask = ~(np.isnan(input_pert_std) | np.isnan(output_pert_std))
+                if np.sum(mask) > 2:
+                    correlation = mstats.pearsonr(
+                        input_pert_std[mask],
+                        output_pert_std[mask]
+                    )[0]
+                else:
+                    correlation = np.nan
             else:
                 correlation = np.nan
             
@@ -281,9 +313,26 @@ def _sensitivity_analysis_loop(
             output_perturbation_std = np.array(run_results[(run_results.output_variable == output_variable) & (run_results.output_variable == output_variable)].output_perturbation_std).astype(np.float32)
             variable_perturbation_df = pd.DataFrame({"input_perturbation_std": input_perturbation_std, "output_perturbation_std": output_perturbation_std})
             variable_perturbation_df = variable_perturbation_df.dropna()
-            input_perturbation_std = variable_perturbation_df.input_perturbation_std
-            output_perturbation_std = variable_perturbation_df.output_perturbation_std
-            correlation = mstats.pearsonr(input_perturbation_std, output_perturbation_std)[0]
+            
+            # Coerce to float64 to handle any remaining object dtypes
+            input_pert_std = np.array(pd.to_numeric(
+                variable_perturbation_df.input_perturbation_std,
+                errors='coerce'
+            ), dtype=np.float64)
+            output_pert_std = np.array(pd.to_numeric(
+                variable_perturbation_df.output_perturbation_std,
+                errors='coerce'
+            ), dtype=np.float64)
+            
+            # Remove NaN values before correlation
+            mask = ~(np.isnan(input_pert_std) | np.isnan(output_pert_std))
+            if np.sum(mask) > 2:
+                correlation = mstats.pearsonr(
+                    input_pert_std[mask],
+                    output_pert_std[mask]
+                )[0]
+            else:
+                correlation = np.nan
 
             sensitivity_metrics_list.append([
                 input_variable,
