@@ -1,4 +1,5 @@
 from typing import Callable, Tuple, Dict
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -45,20 +46,8 @@ def sensitivity_analysis(
     # print(len(input_df))
 
     sensitivity_metrics_columns = ["input_variable", "output_variable", "metric", "value"]
-    sensitivity_metrics_df = pd.DataFrame({}, columns=sensitivity_metrics_columns)
-
-    perturbation_df = pd.DataFrame([], columns=[
-            "input_variable",
-            "output_variable",
-            "input_unperturbed",
-            "input_perturbation",
-            "input_perturbation_std",
-            "input_perturbed",
-            "output_unperturbed",
-            "output_perturbation",
-            "output_perturbation_std",
-            "output_perturbed"
-        ])
+    sensitivity_metrics_list = []
+    perturbation_list = []
 
     for output_variable in output_variables:
         for input_variable in input_variables:
@@ -74,7 +63,7 @@ def sensitivity_analysis(
                 normalization_function=normalization_function
             )
 
-            perturbation_df = pd.concat([perturbation_df, run_results])
+            perturbation_list.append(run_results)
             input_perturbation_std = np.array(run_results[(run_results.input_variable == input_variable) & (run_results.output_variable == output_variable)].input_perturbation_std).astype(np.float32)
             output_perturbation_std = np.array(run_results[(run_results.output_variable == output_variable) & (run_results.output_variable == output_variable)].output_perturbation_std).astype(np.float32)
             # correlation = np.corrcoef(input_perturbation_std, output_perturbation_std)[0][1]
@@ -86,29 +75,39 @@ def sensitivity_analysis(
             output_perturbation_std = variable_perturbation_df.output_perturbation_std
             correlation = mstats.pearsonr(input_perturbation_std, output_perturbation_std)[0]
 
-            sensitivity_metrics_df = pd.concat([sensitivity_metrics_df, pd.DataFrame([[
+            sensitivity_metrics_list.append([
                 input_variable,
                 output_variable,
                 "correlation",
                 correlation
-            ]], columns=sensitivity_metrics_columns)])
+            ])
 
-            r2 = scipy.stats.linregress(input_perturbation_std, output_perturbation_std)[2] ** 2
+            # Suppress expected warnings for small samples
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r2 = scipy.stats.linregress(input_perturbation_std, output_perturbation_std)[2] ** 2
+                mean_normalized_change = np.nanmean(output_perturbation_std)
 
-            sensitivity_metrics_df = pd.concat([sensitivity_metrics_df, pd.DataFrame([[
+            sensitivity_metrics_list.append([
                 input_variable,
                 output_variable,
                 "r2",
                 r2
-            ]], columns=sensitivity_metrics_columns)])
+            ])
 
-            mean_normalized_change = np.nanmean(output_perturbation_std)
-
-            sensitivity_metrics_df = pd.concat([sensitivity_metrics_df, pd.DataFrame([[
+            sensitivity_metrics_list.append([
                 input_variable,
                 output_variable,
                 "mean_normalized_change",
                 mean_normalized_change
-            ]], columns=sensitivity_metrics_columns)])
+            ])
+
+    perturbation_df = pd.concat(perturbation_list, ignore_index=True) if perturbation_list else pd.DataFrame(columns=[
+        "input_variable", "output_variable", "input_unperturbed", "input_perturbation",
+        "input_perturbation_std", "input_perturbed", "output_unperturbed", "output_perturbation",
+        "output_perturbation_std", "output_perturbed"
+    ])
+    
+    sensitivity_metrics_df = pd.DataFrame(sensitivity_metrics_list, columns=sensitivity_metrics_columns) if sensitivity_metrics_list else pd.DataFrame(columns=sensitivity_metrics_columns)
 
     return perturbation_df, sensitivity_metrics_df
