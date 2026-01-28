@@ -157,7 +157,6 @@ class TestPerturbedRun:
         # Should be close to custom_std (within 20% due to random sampling)
         assert abs(actual_std - custom_std) / custom_std < 0.2
 
-    @pytest.mark.skip(reason="perturbed_run ignores perturbation_mean parameter, always uses 0")
     def test_perturbed_run_perturbation_mean(self, simple_dataframe, linear_forward_process, random_seed):
         """Test using non-zero perturbation mean."""
         custom_mean = 1.5
@@ -272,17 +271,18 @@ class TestPerturbedRun:
         
         pd.testing.assert_frame_equal(result1, result2)
 
-    @pytest.mark.skip(reason="Single row input with zero std causes all rows to be dropped")
     def test_perturbed_run_single_row_input(self, linear_forward_process, random_seed):
         """Test with single-row input DataFrame."""
         input_df = pd.DataFrame({'x': [5.0]})
         
+        # Single-row input requires explicit perturbation_std since std=0
         result = perturbed_run(
             input_df=input_df,
             input_variable='x',
             output_variable='y',
             forward_process=linear_forward_process,
-            n=25
+            n=25,
+            perturbation_std=1.0  # Explicit std since single row has zero variance
         )
         
         assert len(result) == 25

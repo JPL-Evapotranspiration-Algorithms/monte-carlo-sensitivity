@@ -3,7 +3,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from monte_carlo_sensitivity import repeat_rows
+from monte_carlo_sensitivity.repeat_rows import repeat_rows
 
 
 def joint_perturbed_run(
@@ -39,19 +39,31 @@ def joint_perturbed_run(
                       unperturbed outputs, perturbed outputs, and standardized perturbations for both inputs
                       and outputs.
     """
+    # Normalize inputs to lists for consistent handling
+    if isinstance(input_variable, str):
+        input_variable = [input_variable]
+    if isinstance(output_variable, str):
+        output_variable = [output_variable]
+    
     # calculate standard deviation of the input variable
-
     n_input = len(input_variable)
     n_output = len(output_variable)
 
-    input_std = np.nanstd(input_df[input_variable],axis=0)
+    input_std = np.nanstd(input_df[input_variable], axis=0)
+    # Handle both scalar and array results from nanstd
+    input_std = np.atleast_1d(input_std)
 
-    if all(x == 0 for x in input_std):
-        input_std = np.empty(n_input) * np.nan
+    # For single-row inputs or zero variance, use default std of 1.0
+    if np.all(input_std == 0) or np.all(np.isnan(input_std)):
+        input_std = np.ones(n_input)
 
     # use diagonal (independent) standard deviations of the input variables if not given
     if perturbation_cov is None:
-        perturbation_cov = np.diag(input_std)
+        # For single-row inputs or zero variance, use identity matrix as default
+        if np.any(np.isnan(input_std)) or np.any(input_std == 0):
+            perturbation_cov = np.eye(n_input)
+        else:
+            perturbation_cov = np.diag(input_std)
 
     if perturbation_mean is None:
         perturbation_mean = np.zeros(n_input)
@@ -60,10 +72,12 @@ def joint_perturbed_run(
     # forward process the unperturbed input
     unperturbed_output_df = forward_process(input_df)
     # calculate standard deviation of the output variable
-    output_std = np.nanstd(unperturbed_output_df[output_variable],axis=0)
+    output_std = np.nanstd(unperturbed_output_df[output_variable], axis=0)
+    # Handle both scalar and array results from nanstd
+    output_std = np.atleast_1d(output_std)
 
-    if all(x == 0 for x in output_std):
-        output_std = np.empty(n_output) * np.nan
+    if np.all(output_std == 0):
+        output_std = np.full(n_output, np.nan)
 
     # extract output variable from unperturbed output
     unperturbed_output = unperturbed_output_df[output_variable]

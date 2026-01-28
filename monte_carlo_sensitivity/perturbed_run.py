@@ -64,7 +64,12 @@ def perturbed_run(
 
     # use standard deviation of the input variable as the perturbation standard deviation if not given
     if perturbation_std is None:
-        perturbation_std = input_std
+        if np.isnan(input_std) or input_std == 0:
+            # For single-row or zero-variance inputs, use a default perturbation
+            perturbation_std = 1.0
+            logger.warning(f"Input variable {input_variable} has zero or undefined std; using default perturbation_std=1.0")
+        else:
+            perturbation_std = input_std
 
     logger.info("starting forward process")
     # forward process the unperturbed input
@@ -86,7 +91,7 @@ def perturbed_run(
 
     logger.info("starting input perturbation generation")
     # generate input perturbation
-    input_perturbation = np.concatenate([perturbation_process(0, perturbation_std, n) for i in range(len(input_df))])
+    input_perturbation = np.concatenate([perturbation_process(perturbation_mean, perturbation_std, n) for i in range(len(input_df))])
     logger.info("input perturbation generation completed")
 
     # input_perturbation_std = input_perturbation / input_std

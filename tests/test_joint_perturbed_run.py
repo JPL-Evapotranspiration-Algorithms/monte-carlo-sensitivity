@@ -3,9 +3,6 @@ Tests for joint_perturbed_run function.
 
 Tests the multivariate Monte Carlo sensitivity analysis function that
 handles correlated perturbations across multiple variables.
-
-NOTE: joint_perturbed_run has bugs with single output variables
-causing iteration errors. Most tests are skipped until fixed.
 """
 
 import numpy as np
@@ -15,7 +12,6 @@ import pytest
 from monte_carlo_sensitivity.joint_perturbed_run import joint_perturbed_run
 
 
-@pytest.mark.skip(reason="joint_perturbed_run has bugs with single output variables - TypeError: 'numpy.float64' object is not iterable")
 class TestJointPerturbedRun:
     """Test suite for joint_perturbed_run function."""
 
