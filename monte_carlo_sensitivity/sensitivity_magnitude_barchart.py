@@ -34,7 +34,9 @@ def sensitivity_magnitude_barchart(
         sns.barplot(x=filtered_df.input_variable, y=filtered_df.value * 100, color='black', ax=ax)
 
         # Rotate x-axis labels 45 degrees
-        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
+        ax.tick_params(axis='x', rotation=45)
+        for label in ax.get_xticklabels():
+            label.set_ha('right')
 
         ax.set_xlabel("Input Variable")
         ax.set_ylabel("Average Percent Change in Output Perturbation")

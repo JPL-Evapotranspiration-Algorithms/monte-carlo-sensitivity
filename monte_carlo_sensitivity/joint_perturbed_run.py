@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Union, List
 
 import numpy as np
 import pandas as pd
@@ -8,8 +8,8 @@ from monte_carlo_sensitivity.repeat_rows import repeat_rows
 
 def joint_perturbed_run(
         input_df: pd.DataFrame,
-        input_variable: str,
-        output_variable: str,
+        input_variable: Union[str, List[str]],
+        output_variable: Union[str, List[str]],
         forward_process: Callable,
         perturbation_process: Callable = np.random.multivariate_normal,
         n: int = 100,
@@ -21,8 +21,8 @@ def joint_perturbed_run(
 
     Parameters:
         input_df (pd.DataFrame): The input DataFrame containing the input variables.
-        input_variable (str): The name(s) of the input variable(s) to perturb.
-        output_variable (str): The name(s) of the output variable(s) to analyze.
+        input_variable (Union[str, List[str]]): The name(s) of the input variable(s) to perturb.
+        output_variable (Union[str, List[str]]): The name(s) of the output variable(s) to analyze.
         forward_process (Callable): A function that processes the input DataFrame and returns a DataFrame
                                     with output variables.
         perturbation_process (Callable, optional): A function to generate perturbations. Defaults to
@@ -86,7 +86,9 @@ def joint_perturbed_run(
     # generate input perturbation
     input_perturbation = perturbation_process(perturbation_mean, perturbation_cov, n*len(input_df))
     print(input_perturbation.shape)
-    input_perturbation_std = input_perturbation / input_std
+    # Suppress divide by zero warning - produces inf/NaN which is handled downstream
+    with np.errstate(divide='ignore', invalid='ignore'):
+        input_perturbation_std = input_perturbation / input_std
     # copy input for perturbation
     perturbed_input_df = input_df.copy()
     # repeat input for perturbation

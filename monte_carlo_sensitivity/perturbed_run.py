@@ -52,7 +52,7 @@ def perturbed_run(
         - "output_perturbation_std": The normalized output perturbations.
         - "output_perturbed": The perturbed output values.
     """
-    logger.info("tarting Monte Carlo perturbed run")
+    logger.info("Starting Monte Carlo perturbed run")
 
     logger.info(f"calculating standard deviation of input variable: {input_variable}")
     # calculate standard deviation of the input variable

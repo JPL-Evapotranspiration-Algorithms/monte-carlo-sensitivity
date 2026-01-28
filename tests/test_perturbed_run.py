@@ -287,3 +287,27 @@ class TestPerturbedRun:
         
         assert len(result) == 25
         assert all(result['input_unperturbed'] == 5.0)
+
+    def test_perturbed_run_zero_variance_input_auto_std(self, linear_forward_process, random_seed, caplog):
+        """Test with zero-variance input, triggering automatic default perturbation_std."""
+        import logging
+        caplog.set_level(logging.WARNING)
+        
+        # Create input with all identical values (zero variance)
+        input_df = pd.DataFrame({'x': [10.0, 10.0, 10.0]})
+        
+        # Don't provide perturbation_std, let it use default
+        result = perturbed_run(
+            input_df=input_df,
+            input_variable='x',
+            output_variable='y',
+            forward_process=linear_forward_process,
+            n=20
+        )
+        
+        # Should complete successfully with default perturbation_std=1.0
+        assert len(result) == 60  # 3 rows * 20 perturbations
+        assert all(result['input_unperturbed'] == 10.0)
+        
+        # Check that warning was logged about using default std
+        assert any("using default perturbation_std=1.0" in record.message for record in caplog.records)

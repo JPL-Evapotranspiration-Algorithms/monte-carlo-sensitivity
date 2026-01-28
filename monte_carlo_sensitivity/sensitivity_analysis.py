@@ -1,4 +1,4 @@
-from typing import Callable, Tuple, Dict
+from typing import Callable, Tuple, List
 import warnings
 
 import numpy as np
@@ -11,14 +11,14 @@ from .perturbed_run import DEFAULT_NORMALIZATION_FUNCTION, perturbed_run
 
 def sensitivity_analysis(
         input_df: pd.DataFrame,
-        input_variables: str,
-        output_variables: str,
+        input_variables: List[str],
+        output_variables: List[str],
         forward_process: Callable,
         perturbation_process: Callable = np.random.normal,
         normalization_function: Callable = DEFAULT_NORMALIZATION_FUNCTION,
         n: int = 100,
         perturbation_mean: float = 0,
-        perturbation_std: float = None) -> Tuple[pd.DataFrame, Dict]:
+        perturbation_std: float = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Perform sensitivity analysis by perturbing input variables and observing the effect on output variables.
 
@@ -34,7 +34,7 @@ def sensitivity_analysis(
         perturbation_std (float, optional): Standard deviation of the perturbation distribution. Defaults to None.
 
     Returns:
-        Tuple[pd.DataFrame, Dict]: A tuple containing:
+        Tuple[pd.DataFrame, pd.DataFrame]: A tuple containing:
             - perturbation_df (pd.DataFrame): A DataFrame with details of the perturbations and their effects.
             - sensitivity_metrics_df (pd.DataFrame): A DataFrame with sensitivity metrics such as correlation, R², and mean normalized change.
     """
@@ -83,10 +83,16 @@ def sensitivity_analysis(
             ])
 
             # Suppress expected warnings for small samples
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                r2 = scipy.stats.linregress(input_perturbation_std, output_perturbation_std)[2] ** 2
-                mean_normalized_change = np.nanmean(output_perturbation_std)
+            # Check if there are enough valid data points for regression
+            if len(input_perturbation_std) >= 2:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    r2 = scipy.stats.linregress(input_perturbation_std, output_perturbation_std)[2] ** 2
+                    mean_normalized_change = np.nanmean(output_perturbation_std)
+            else:
+                # Not enough data points for regression (e.g., constant output)
+                r2 = np.nan
+                mean_normalized_change = np.nan
 
             sensitivity_metrics_list.append([
                 input_variable,

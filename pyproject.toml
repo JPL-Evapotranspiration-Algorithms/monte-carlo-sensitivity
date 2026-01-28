@@ -15,9 +15,11 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    "matplotlib",
     "numpy",
     "pandas",
-    "scipy"
+    "scipy",
+    "seaborn"
 ]
 requires-python = ">=3.10"
 

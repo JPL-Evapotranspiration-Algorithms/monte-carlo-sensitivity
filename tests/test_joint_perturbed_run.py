@@ -370,3 +370,57 @@ class TestJointPerturbedRun:
         )
         
         assert len(result) == 4  # 2 rows * 2 perturbations
+
+    def test_joint_perturbed_run_zero_variance_inputs(self, random_seed):
+        """Test with zero-variance inputs triggers identity covariance matrix."""
+        # Create input with zero variance (all same values)
+        input_df = pd.DataFrame({
+            'x1': [5.0, 5.0, 5.0],
+            'x2': [10.0, 10.0, 10.0]
+        })
+        
+        def process(df):
+            result = df.copy()
+            result['y'] = df['x1'] + df['x2']
+            return result
+        
+        # Should not raise error, should use ones for std when all inputs have zero variance
+        result = joint_perturbed_run(
+            input_df=input_df,
+            input_variable=['x1', 'x2'],
+            output_variable='y',
+            forward_process=process,
+            n=10
+        )
+        
+        assert len(result) == 30  # 3 rows * 10 perturbations
+        assert 'x1_perturbed' in result.columns
+        assert 'x2_perturbed' in result.columns
+        assert 'y_perturbed' in result.columns
+
+    def test_joint_perturbed_run_mixed_variance_inputs(self, random_seed):
+        """Test with some zero-variance inputs triggers identity covariance matrix."""
+        # Create input where x1 has variance but x2 is constant (zero variance)
+        input_df = pd.DataFrame({
+            'x1': [1.0, 2.0, 3.0],
+            'x2': [10.0, 10.0, 10.0]  # Zero variance
+        })
+        
+        def process(df):
+            result = df.copy()
+            result['y'] = df['x1'] * df['x2']
+            return result
+        
+        # Should use identity matrix when some inputs have zero variance
+        result = joint_perturbed_run(
+            input_df=input_df,
+            input_variable=['x1', 'x2'],
+            output_variable='y',
+            forward_process=process,
+            n=10
+        )
+        
+        assert len(result) == 30  # 3 rows * 10 perturbations
+        assert 'x1_perturbed' in result.columns
+        assert 'x2_perturbed' in result.columns
+        assert 'y_perturbed' in result.columns
