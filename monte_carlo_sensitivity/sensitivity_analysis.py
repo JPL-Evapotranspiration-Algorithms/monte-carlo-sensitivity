@@ -1,4 +1,5 @@
-from typing import Callable, Tuple, Dict
+from typing import Callable, Tuple, List
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -6,18 +7,20 @@ import scipy
 from scipy.stats import mstats
 
 from .perturbed_run import DEFAULT_NORMALIZATION_FUNCTION, perturbed_run
+from .repeat_rows import repeat_rows
 
 
 def sensitivity_analysis(
         input_df: pd.DataFrame,
-        input_variables: str,
-        output_variables: str,
+        input_variables: List[str],
+        output_variables: List[str],
         forward_process: Callable,
         perturbation_process: Callable = np.random.normal,
         normalization_function: Callable = DEFAULT_NORMALIZATION_FUNCTION,
         n: int = 100,
         perturbation_mean: float = 0,
-        perturbation_std: float = None) -> Tuple[pd.DataFrame, Dict]:
+        perturbation_std: float = None,
+        use_joint_run: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Perform sensitivity analysis by perturbing input variables and observing the effect on output variables.
 
@@ -31,34 +34,233 @@ def sensitivity_analysis(
         n (int, optional): Number of perturbations to generate. Defaults to 100.
         perturbation_mean (float, optional): Mean of the perturbation distribution. Defaults to 0.
         perturbation_std (float, optional): Standard deviation of the perturbation distribution. Defaults to None.
+        use_joint_run (bool, optional): If True, runs forward process once on all perturbations (more efficient). 
+                                       If False, uses original loop-based approach. Defaults to True.
 
     Returns:
-        Tuple[pd.DataFrame, Dict]: A tuple containing:
+        Tuple[pd.DataFrame, pd.DataFrame]: A tuple containing:
             - perturbation_df (pd.DataFrame): A DataFrame with details of the perturbations and their effects.
             - sensitivity_metrics_df (pd.DataFrame): A DataFrame with sensitivity metrics such as correlation, R², and mean normalized change.
     """
-    # print(len(input_df))
-
+    # Filter out NaN values for input variables
     for input_variable in input_variables:
         input_df = input_df[~np.isnan(input_df[input_variable])]
 
-    # print(len(input_df))
+    if use_joint_run:
+        return _sensitivity_analysis_joint(
+            input_df, input_variables, output_variables, forward_process,
+            perturbation_process, normalization_function, n, perturbation_mean, perturbation_std
+        )
+    else:
+        return _sensitivity_analysis_loop(
+            input_df, input_variables, output_variables, forward_process,
+            perturbation_process, normalization_function, n, perturbation_mean, perturbation_std
+        )
 
-    sensitivity_metrics_columns = ["input_variable", "output_variable", "metric", "value"]
-    sensitivity_metrics_df = pd.DataFrame({}, columns=sensitivity_metrics_columns)
 
-    perturbation_df = pd.DataFrame([], columns=[
-            "input_variable",
-            "output_variable",
-            "input_unperturbed",
-            "input_perturbation",
-            "input_perturbation_std",
-            "input_perturbed",
-            "output_unperturbed",
-            "output_perturbation",
-            "output_perturbation_std",
-            "output_perturbed"
+def _sensitivity_analysis_joint(
+        input_df: pd.DataFrame,
+        input_variables: List[str],
+        output_variables: List[str],
+        forward_process: Callable,
+        perturbation_process: Callable,
+        normalization_function: Callable,
+        n: int,
+        perturbation_mean: float,
+        perturbation_std: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Optimized sensitivity analysis that runs forward process only twice:
+    once on unperturbed data, once on all combined perturbations.
+    """
+    # Calculate standard deviations for each input variable
+    input_stds = {}
+    perturbation_stds = {}
+    for input_variable in input_variables:
+        input_std = np.nanstd(input_df[input_variable])
+        if input_std == 0 or np.isnan(input_std):
+            input_std = np.nan
+        input_stds[input_variable] = input_std
+        
+        # Use standard deviation of input variable as perturbation std if not given
+        if perturbation_std is None:
+            if np.isnan(input_std) or input_std == 0:
+                perturbation_stds[input_variable] = 1.0
+            else:
+                perturbation_stds[input_variable] = input_std
+        else:
+            perturbation_stds[input_variable] = perturbation_std
+
+    # Run forward process ONCE on unperturbed data
+    unperturbed_output_df = forward_process(input_df)
+    
+    # Calculate output standard deviations
+    output_stds = {}
+    for output_variable in output_variables:
+        output_std = np.nanstd(unperturbed_output_df[output_variable])
+        if output_std == 0:
+            output_std = np.nan
+        output_stds[output_variable] = output_std
+
+    # Generate all perturbations for all input variables
+    all_perturbations = {}
+    all_unperturbed_inputs = {}
+    
+    for input_variable in input_variables:
+        perturbations = np.concatenate([
+            perturbation_process(perturbation_mean, perturbation_stds[input_variable], n) 
+            for i in range(len(input_df))
         ])
+        all_perturbations[input_variable] = perturbations
+
+    # Build one large combined dataframe with all perturbation scenarios stacked
+    combined_perturbed_dfs = []
+    perturbation_metadata = []
+    
+    for input_variable in input_variables:
+        # Copy and repeat input data for this variable's perturbations
+        perturbed_input_df = repeat_rows(input_df.copy(), n)
+        unperturbed_input = perturbed_input_df[input_variable].copy()
+        
+        # Apply perturbation to only this input variable
+        perturbations = all_perturbations[input_variable]
+        perturbed_input_df[input_variable] = perturbed_input_df[input_variable] + perturbations
+        
+        # Store metadata for later
+        normalized_perturbations = normalization_function(perturbations, unperturbed_input)
+        perturbation_metadata.append({
+            'input_variable': input_variable,
+            'unperturbed_input': unperturbed_input,
+            'perturbations': perturbations,
+            'normalized_perturbations': normalized_perturbations,
+            'perturbed_input': perturbed_input_df[input_variable].copy()
+        })
+        
+        combined_perturbed_dfs.append(perturbed_input_df)
+    
+    # Stack all perturbed scenarios into one big dataframe
+    combined_perturbed_df = pd.concat(combined_perturbed_dfs, ignore_index=True)
+    
+    # Run forward process ONCE on all combined perturbations
+    combined_perturbed_output_df = forward_process(combined_perturbed_df)
+    
+    # Split the combined output back into separate results per input variable
+    rows_per_scenario = len(input_df) * n
+    perturbed_outputs_by_variable = {}
+    
+    for idx, input_variable in enumerate(input_variables):
+        start_idx = idx * rows_per_scenario
+        end_idx = (idx + 1) * rows_per_scenario
+        perturbed_outputs_by_variable[input_variable] = combined_perturbed_output_df.iloc[start_idx:end_idx].reset_index(drop=True)
+    
+    # Prepare repeated unperturbed outputs
+    repeated_unperturbed_output = repeat_rows(unperturbed_output_df, n)
+    
+    # Build results for each input-output combination
+    sensitivity_metrics_list = []
+    perturbation_list = []
+    
+    for output_variable in output_variables:
+        for i, input_variable in enumerate(input_variables):
+            metadata = perturbation_metadata[i]
+            perturbed_output_df = perturbed_outputs_by_variable[input_variable]
+            
+            # Extract relevant data
+            unperturbed_input = metadata['unperturbed_input']
+            perturbed_input = metadata['perturbed_input']
+            input_perturbation = metadata['perturbations']
+            input_perturbation_std = metadata['normalized_perturbations']
+            
+            unperturbed_output = repeated_unperturbed_output[output_variable]
+            perturbed_output = perturbed_output_df[output_variable]
+            output_perturbation = perturbed_output.values - unperturbed_output.values
+            output_perturbation_std = normalization_function(output_perturbation, unperturbed_output.values)
+            
+            # Create results dataframe for this combination
+            results_df = pd.DataFrame({
+                "input_variable": input_variable,
+                "output_variable": output_variable,
+                "input_unperturbed": unperturbed_input,
+                "input_perturbation": input_perturbation,
+                "input_perturbation_std": input_perturbation_std,
+                "input_perturbed": perturbed_input,
+                "output_unperturbed": unperturbed_output,
+                "output_perturbation": output_perturbation,
+                "output_perturbation_std": output_perturbation_std,
+                "output_perturbed": perturbed_output.values,
+            })
+            
+            perturbation_list.append(results_df)
+            
+            # Calculate metrics
+            variable_perturbation_df = pd.DataFrame({
+                "input_perturbation_std": input_perturbation_std,
+                "output_perturbation_std": output_perturbation_std
+            }).dropna()
+            
+            if len(variable_perturbation_df) > 0:
+                input_pert_std = variable_perturbation_df.input_perturbation_std
+                output_pert_std = variable_perturbation_df.output_perturbation_std
+                correlation = mstats.pearsonr(input_pert_std, output_pert_std)[0]
+            else:
+                correlation = np.nan
+            
+            sensitivity_metrics_list.append([
+                input_variable, output_variable, "correlation", correlation
+            ])
+            
+            # Calculate R² and mean normalized change
+            if len(variable_perturbation_df) >= 2:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    r2 = scipy.stats.linregress(
+                        variable_perturbation_df.input_perturbation_std,
+                        variable_perturbation_df.output_perturbation_std
+                    )[2] ** 2
+                    mean_normalized_change = np.nanmean(variable_perturbation_df.output_perturbation_std)
+            else:
+                r2 = np.nan
+                mean_normalized_change = np.nan
+            
+            sensitivity_metrics_list.append([
+                input_variable, output_variable, "r2", r2
+            ])
+            sensitivity_metrics_list.append([
+                input_variable, output_variable, "mean_normalized_change", mean_normalized_change
+            ])
+
+    # Combine all results
+    perturbation_df = pd.concat(perturbation_list, ignore_index=True) if perturbation_list else pd.DataFrame(columns=[
+        "input_variable", "output_variable", "input_unperturbed", "input_perturbation",
+        "input_perturbation_std", "input_perturbed", "output_unperturbed", "output_perturbation",
+        "output_perturbation_std", "output_perturbed"
+    ])
+    
+    sensitivity_metrics_df = pd.DataFrame(
+        sensitivity_metrics_list,
+        columns=["input_variable", "output_variable", "metric", "value"]
+    ) if sensitivity_metrics_list else pd.DataFrame(
+        columns=["input_variable", "output_variable", "metric", "value"]
+    )
+
+    return perturbation_df, sensitivity_metrics_df
+
+
+def _sensitivity_analysis_loop(
+        input_df: pd.DataFrame,
+        input_variables: List[str],
+        output_variables: List[str],
+        forward_process: Callable,
+        perturbation_process: Callable,
+        normalization_function: Callable,
+        n: int,
+        perturbation_mean: float,
+        perturbation_std: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Original loop-based sensitivity analysis (for backward compatibility).
+    """
+    sensitivity_metrics_columns = ["input_variable", "output_variable", "metric", "value"]
+    sensitivity_metrics_list = []
+    perturbation_list = []
 
     for output_variable in output_variables:
         for input_variable in input_variables:
@@ -74,41 +276,54 @@ def sensitivity_analysis(
                 normalization_function=normalization_function
             )
 
-            perturbation_df = pd.concat([perturbation_df, run_results])
+            perturbation_list.append(run_results)
             input_perturbation_std = np.array(run_results[(run_results.input_variable == input_variable) & (run_results.output_variable == output_variable)].input_perturbation_std).astype(np.float32)
             output_perturbation_std = np.array(run_results[(run_results.output_variable == output_variable) & (run_results.output_variable == output_variable)].output_perturbation_std).astype(np.float32)
-            # correlation = np.corrcoef(input_perturbation_std, output_perturbation_std)[0][1]
             variable_perturbation_df = pd.DataFrame({"input_perturbation_std": input_perturbation_std, "output_perturbation_std": output_perturbation_std})
-            # print(len(variable_perturbation_df))
             variable_perturbation_df = variable_perturbation_df.dropna()
-            # print(len(variable_perturbation_df))
             input_perturbation_std = variable_perturbation_df.input_perturbation_std
             output_perturbation_std = variable_perturbation_df.output_perturbation_std
             correlation = mstats.pearsonr(input_perturbation_std, output_perturbation_std)[0]
 
-            sensitivity_metrics_df = pd.concat([sensitivity_metrics_df, pd.DataFrame([[
+            sensitivity_metrics_list.append([
                 input_variable,
                 output_variable,
                 "correlation",
                 correlation
-            ]], columns=sensitivity_metrics_columns)])
+            ])
 
-            r2 = scipy.stats.linregress(input_perturbation_std, output_perturbation_std)[2] ** 2
+            # Suppress expected warnings for small samples
+            # Check if there are enough valid data points for regression
+            if len(input_perturbation_std) >= 2:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    r2 = scipy.stats.linregress(input_perturbation_std, output_perturbation_std)[2] ** 2
+                    mean_normalized_change = np.nanmean(output_perturbation_std)
+            else:
+                # Not enough data points for regression (e.g., constant output)
+                r2 = np.nan
+                mean_normalized_change = np.nan
 
-            sensitivity_metrics_df = pd.concat([sensitivity_metrics_df, pd.DataFrame([[
+            sensitivity_metrics_list.append([
                 input_variable,
                 output_variable,
                 "r2",
                 r2
-            ]], columns=sensitivity_metrics_columns)])
+            ])
 
-            mean_normalized_change = np.nanmean(output_perturbation_std)
-
-            sensitivity_metrics_df = pd.concat([sensitivity_metrics_df, pd.DataFrame([[
+            sensitivity_metrics_list.append([
                 input_variable,
                 output_variable,
                 "mean_normalized_change",
                 mean_normalized_change
-            ]], columns=sensitivity_metrics_columns)])
+            ])
+
+    perturbation_df = pd.concat(perturbation_list, ignore_index=True) if perturbation_list else pd.DataFrame(columns=[
+        "input_variable", "output_variable", "input_unperturbed", "input_perturbation",
+        "input_perturbation_std", "input_perturbed", "output_unperturbed", "output_perturbation",
+        "output_perturbation_std", "output_perturbed"
+    ])
+    
+    sensitivity_metrics_df = pd.DataFrame(sensitivity_metrics_list, columns=sensitivity_metrics_columns) if sensitivity_metrics_list else pd.DataFrame(columns=sensitivity_metrics_columns)
 
     return perturbation_df, sensitivity_metrics_df

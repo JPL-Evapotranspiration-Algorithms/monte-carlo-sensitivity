@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 
 
@@ -12,4 +14,6 @@ def divide_by_std(perterbations: np.array, unperturbed_values: np.array) -> np.a
     Returns:
     np.array: Array of perturbations normalized by the standard deviation of the unperturbed values.
     """
-    return perterbations / np.nanstd(unperturbed_values)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        return perterbations / np.nanstd(unperturbed_values)

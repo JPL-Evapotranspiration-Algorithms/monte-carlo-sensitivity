@@ -178,7 +178,7 @@ The `perturbed_run` function performs a Monte Carlo sensitivity analysis by pert
 
 ```python
 import pandas as pd
-from monte_carlo_sensitivity.perturbed_run import perturbed_run
+from monte_carlo_sensitivity import perturbed_run
 
 # Example input DataFrame
 input_df = pd.DataFrame({
@@ -210,7 +210,7 @@ The `joint_perturbed_run` function evaluates the sensitivity of output variables
 
 ```python
 import pandas as pd
-from monte_carlo_sensitivity.joint_perturbed_run import joint_perturbed_run
+from monte_carlo_sensitivity import joint_perturbed_run
 
 # Example input DataFrame
 input_df = pd.DataFrame({

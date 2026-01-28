@@ -13,7 +13,16 @@ clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 
 test:
-	pytest
+	pytest -v
+
+test-cov:
+	pytest -v --cov=monte_carlo_sensitivity --cov-report=term-missing --cov-report=html
+
+test-fast:
+	pytest -v -m "not slow"
+
+test-verbose:
+	pytest -vv -s
 
 build:
 	python -m build
