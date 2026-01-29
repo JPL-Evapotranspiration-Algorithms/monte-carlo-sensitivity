@@ -1,4 +1,4 @@
-from typing import Callable, Tuple, List
+from typing import Callable, Tuple, List, Optional, Union, Dict
 import warnings
 
 import numpy as np
@@ -20,7 +20,9 @@ def sensitivity_analysis(
         n: int = 100,
         perturbation_mean: float = 0,
         perturbation_std: float = None,
-        use_joint_run: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        use_joint_run: bool = True,
+        input_min: Optional[Union[Dict[str, float], float]] = None,
+        input_max: Optional[Union[Dict[str, float], float]] = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Perform sensitivity analysis by perturbing input variables and observing the effect on output variables.
 
@@ -36,11 +38,23 @@ def sensitivity_analysis(
         perturbation_std (float, optional): Standard deviation of the perturbation distribution. Defaults to None.
         use_joint_run (bool, optional): If True, runs forward process once on all perturbations (more efficient). 
                                        If False, uses original loop-based approach. Defaults to True.
+        input_min (Optional[Union[Dict[str, float], float]], optional): Minimum allowed values for input variables.
+                                       Can be a single float (applied to all variables) or dict mapping variable names to limits.
+                                       Perturbed values below this limit will be clipped. Defaults to None (no constraint).
+        input_max (Optional[Union[Dict[str, float], float]], optional): Maximum allowed values for input variables.
+                                       Can be a single float (applied to all variables) or dict mapping variable names to limits.
+                                       Perturbed values above this limit will be clipped. Defaults to None (no constraint).
 
     Returns:
         Tuple[pd.DataFrame, pd.DataFrame]: A tuple containing:
             - perturbation_df (pd.DataFrame): A DataFrame with details of the perturbations and their effects.
             - sensitivity_metrics_df (pd.DataFrame): A DataFrame with sensitivity metrics such as correlation, R², and mean normalized change.
+    
+    Notes:
+        When input_min or input_max constraints are specified, perturbed values are clipped to stay within bounds.
+        This uses simple post-perturbation clipping, which introduces bias when many values hit the constraints.
+        The actual perturbations recorded reflect the clipped values, not the original generated perturbations.
+        Consider using smaller perturbation_std if many values are being clipped (>10% of perturbations).
     """
     # Filter out NaN values for input variables
     for input_variable in input_variables:
@@ -49,12 +63,14 @@ def sensitivity_analysis(
     if use_joint_run:
         return _sensitivity_analysis_joint(
             input_df, input_variables, output_variables, forward_process,
-            perturbation_process, normalization_function, n, perturbation_mean, perturbation_std
+            perturbation_process, normalization_function, n, perturbation_mean, perturbation_std,
+            input_min, input_max
         )
     else:
         return _sensitivity_analysis_loop(
             input_df, input_variables, output_variables, forward_process,
-            perturbation_process, normalization_function, n, perturbation_mean, perturbation_std
+            perturbation_process, normalization_function, n, perturbation_mean, perturbation_std,
+            input_min, input_max
         )
 
 
@@ -67,7 +83,9 @@ def _sensitivity_analysis_joint(
         normalization_function: Callable,
         n: int,
         perturbation_mean: float,
-        perturbation_std: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        perturbation_std: float,
+        input_min: Optional[Union[Dict[str, float], float]] = None,
+        input_max: Optional[Union[Dict[str, float], float]] = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Optimized sensitivity analysis that runs forward process only twice:
     once on unperturbed data, once on all combined perturbations.
@@ -131,7 +149,18 @@ def _sensitivity_analysis_joint(
         
         # Apply perturbation to only this input variable
         perturbations = all_perturbations[input_variable]
-        perturbed_input_df[input_variable] = perturbed_input_df[input_variable] + perturbations
+        perturbed_values = perturbed_input_df[input_variable] + perturbations
+        
+        # Apply constraints if specified
+        var_min = input_min.get(input_variable, None) if isinstance(input_min, dict) else input_min
+        var_max = input_max.get(input_variable, None) if isinstance(input_max, dict) else input_max
+        
+        if var_min is not None or var_max is not None:
+            perturbed_values = np.clip(perturbed_values, var_min, var_max)
+            # Recalculate actual perturbations after clipping
+            perturbations = perturbed_values.values - unperturbed_input.values
+        
+        perturbed_input_df[input_variable] = perturbed_values
         
         # Store metadata for later
         normalized_perturbations = normalization_function(perturbations, unperturbed_input)
@@ -286,7 +315,9 @@ def _sensitivity_analysis_loop(
         normalization_function: Callable,
         n: int,
         perturbation_mean: float,
-        perturbation_std: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        perturbation_std: float,
+        input_min: Optional[Union[Dict[str, float], float]] = None,
+        input_max: Optional[Union[Dict[str, float], float]] = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Original loop-based sensitivity analysis (for backward compatibility).
     """
@@ -296,6 +327,10 @@ def _sensitivity_analysis_loop(
 
     for output_variable in output_variables:
         for input_variable in input_variables:
+            # Extract constraints for this specific variable
+            var_min = input_min.get(input_variable, None) if isinstance(input_min, dict) else input_min
+            var_max = input_max.get(input_variable, None) if isinstance(input_max, dict) else input_max
+            
             run_results = perturbed_run(
                 input_df=input_df,
                 input_variable=input_variable,
@@ -305,7 +340,9 @@ def _sensitivity_analysis_loop(
                 n=n,
                 perturbation_mean=perturbation_mean,
                 perturbation_std=perturbation_std,
-                normalization_function=normalization_function
+                normalization_function=normalization_function,
+                input_min=var_min,
+                input_max=var_max
             )
 
             perturbation_list.append(run_results)
