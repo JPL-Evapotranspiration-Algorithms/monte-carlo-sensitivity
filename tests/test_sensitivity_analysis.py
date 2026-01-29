@@ -312,3 +312,32 @@ class TestSensitivityAnalysis:
         
         assert set(unique_inputs).issubset({'input_a', 'input_b'})
         assert set(unique_outputs).issubset({'output_x', 'output_y'})
+
+    def test_joint_mode_handles_object_and_low_variance(self, random_seed):
+        """Joint mode should tolerate object dtypes and near-constant data without crashing."""
+        input_df = pd.DataFrame({
+            'x': pd.Series([1.0, 1.0], dtype=object)
+        })
+
+        def process(df):
+            result = df.copy()
+            # Produce a nearly constant output to exercise variance guards
+            result['y'] = pd.to_numeric(df['x'], errors='coerce') * 1.0
+            return result
+
+        perturbation_df, metrics_df = sensitivity_analysis(
+            input_df=input_df,
+            input_variables=['x'],
+            output_variables=['y'],
+            forward_process=process,
+            n=5,
+            use_joint_run=True
+        )
+
+        # Should produce the standard metric set without raising
+        assert set(metrics_df['metric']) == {'correlation', 'r2', 'mean_normalized_change'}
+        # r2 may be NaN when variance is zero but should not error
+        r2_value = metrics_df.loc[metrics_df['metric'] == 'r2', 'value'].iloc[0]
+        assert np.isnan(r2_value) or 0 <= r2_value <= 1
+        # Perturbations should still be returned
+        assert not perturbation_df.empty

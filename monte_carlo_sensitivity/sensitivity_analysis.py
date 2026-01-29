@@ -56,9 +56,12 @@ def sensitivity_analysis(
         The actual perturbations recorded reflect the clipped values, not the original generated perturbations.
         Consider using smaller perturbation_std if many values are being clipped (>10% of perturbations).
     """
-    # Filter out NaN values for input variables
+    # Filter out NaN values for input variables and coerce to numeric to avoid object issues
     for input_variable in input_variables:
-        input_df = input_df[~np.isnan(input_df[input_variable])]
+        numeric_col = pd.to_numeric(input_df[input_variable], errors="coerce")
+        valid_mask = ~np.isnan(numeric_col)
+        input_df = input_df.loc[valid_mask].copy()
+        input_df[input_variable] = numeric_col.loc[valid_mask].values
 
     if use_joint_run:
         return _sensitivity_analysis_joint(
@@ -241,47 +244,47 @@ def _sensitivity_analysis_joint(
                 "input_perturbation_std": input_perturbation_std,
                 "output_perturbation_std": output_perturbation_std
             }).dropna()
-            
-            if len(variable_perturbation_df) > 0:
-                # Coerce to float64 to handle any remaining object dtypes
-                input_pert_std = np.array(pd.to_numeric(
-                    variable_perturbation_df.input_perturbation_std,
-                    errors='coerce'
-                ), dtype=np.float64)
-                output_pert_std = np.array(pd.to_numeric(
-                    variable_perturbation_df.output_perturbation_std,
-                    errors='coerce'
-                ), dtype=np.float64)
-                
-                # Remove NaN values before correlation
-                mask = ~(np.isnan(input_pert_std) | np.isnan(output_pert_std))
-                if np.sum(mask) > 2:
-                    correlation = mstats.pearsonr(
-                        input_pert_std[mask],
-                        output_pert_std[mask]
-                    )[0]
-                else:
-                    correlation = np.nan
+
+            # Sanitize to numeric and filter to finite values once for all metrics
+            input_pert_std = np.array(pd.to_numeric(
+                variable_perturbation_df.input_perturbation_std,
+                errors="coerce"
+            ), dtype=np.float64)
+            output_pert_std = np.array(pd.to_numeric(
+                variable_perturbation_df.output_perturbation_std,
+                errors="coerce"
+            ), dtype=np.float64)
+
+            valid_mask = np.isfinite(input_pert_std) & np.isfinite(output_pert_std)
+            valid_input = input_pert_std[valid_mask]
+            valid_output = output_pert_std[valid_mask]
+
+            if len(valid_input) > 2:
+                correlation = mstats.pearsonr(valid_input, valid_output)[0]
             else:
                 correlation = np.nan
-            
+
             sensitivity_metrics_list.append([
                 input_variable, output_variable, "correlation", correlation
             ])
-            
-            # Calculate R² and mean normalized change
-            if len(variable_perturbation_df) >= 2:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    r2 = scipy.stats.linregress(
-                        variable_perturbation_df.input_perturbation_std,
-                        variable_perturbation_df.output_perturbation_std
-                    )[2] ** 2
-                    mean_normalized_change = np.nanmean(variable_perturbation_df.output_perturbation_std)
+
+            # Calculate R² and mean normalized change using sanitized values
+            if len(valid_input) >= 2:
+                input_var = np.nanvar(valid_input)
+                output_var = np.nanvar(valid_output)
+
+                if input_var > 1e-10 and output_var > 1e-10:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        r2 = scipy.stats.linregress(valid_input, valid_output)[2] ** 2
+                else:
+                    r2 = np.nan
+
+                mean_normalized_change = np.nanmean(valid_output)
             else:
                 r2 = np.nan
                 mean_normalized_change = np.nan
-            
+
             sensitivity_metrics_list.append([
                 input_variable, output_variable, "r2", r2
             ])
@@ -351,23 +354,22 @@ def _sensitivity_analysis_loop(
             variable_perturbation_df = pd.DataFrame({"input_perturbation_std": input_perturbation_std, "output_perturbation_std": output_perturbation_std})
             variable_perturbation_df = variable_perturbation_df.dropna()
             
-            # Coerce to float64 to handle any remaining object dtypes
+            # Coerce to float64, drop invalids once, and reuse for all metrics
             input_pert_std = np.array(pd.to_numeric(
                 variable_perturbation_df.input_perturbation_std,
-                errors='coerce'
+                errors="coerce"
             ), dtype=np.float64)
             output_pert_std = np.array(pd.to_numeric(
                 variable_perturbation_df.output_perturbation_std,
-                errors='coerce'
+                errors="coerce"
             ), dtype=np.float64)
-            
-            # Remove NaN values before correlation
-            mask = ~(np.isnan(input_pert_std) | np.isnan(output_pert_std))
-            if np.sum(mask) > 2:
-                correlation = mstats.pearsonr(
-                    input_pert_std[mask],
-                    output_pert_std[mask]
-                )[0]
+
+            valid_mask = np.isfinite(input_pert_std) & np.isfinite(output_pert_std)
+            valid_input = input_pert_std[valid_mask]
+            valid_output = output_pert_std[valid_mask]
+
+            if len(valid_input) > 2:
+                correlation = mstats.pearsonr(valid_input, valid_output)[0]
             else:
                 correlation = np.nan
 
@@ -380,11 +382,18 @@ def _sensitivity_analysis_loop(
 
             # Suppress expected warnings for small samples
             # Check if there are enough valid data points for regression
-            if len(input_perturbation_std) >= 2:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    r2 = scipy.stats.linregress(input_perturbation_std, output_perturbation_std)[2] ** 2
-                    mean_normalized_change = np.nanmean(output_perturbation_std)
+            if len(valid_input) >= 2:
+                input_var = np.nanvar(valid_input)
+                output_var = np.nanvar(valid_output)
+
+                if input_var > 1e-10 and output_var > 1e-10:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        r2 = scipy.stats.linregress(valid_input, valid_output)[2] ** 2
+                else:
+                    r2 = np.nan
+
+                mean_normalized_change = np.nanmean(valid_output)
             else:
                 # Not enough data points for regression (e.g., constant output)
                 r2 = np.nan
