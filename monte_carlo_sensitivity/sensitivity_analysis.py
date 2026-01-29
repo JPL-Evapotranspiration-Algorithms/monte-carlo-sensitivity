@@ -271,13 +271,21 @@ def _sensitivity_analysis_joint(
             
             # Calculate R² and mean normalized change
             if len(variable_perturbation_df) >= 2:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    r2 = scipy.stats.linregress(
-                        variable_perturbation_df.input_perturbation_std,
-                        variable_perturbation_df.output_perturbation_std
-                    )[2] ** 2
-                    mean_normalized_change = np.nanmean(variable_perturbation_df.output_perturbation_std)
+                # Check for sufficient variance before linregress
+                input_var = np.nanvar(variable_perturbation_df.input_perturbation_std)
+                output_var = np.nanvar(variable_perturbation_df.output_perturbation_std)
+                
+                if input_var > 1e-10 and output_var > 1e-10:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        r2 = scipy.stats.linregress(
+                            variable_perturbation_df.input_perturbation_std,
+                            variable_perturbation_df.output_perturbation_std
+                        )[2] ** 2
+                else:
+                    r2 = np.nan
+                
+                mean_normalized_change = np.nanmean(variable_perturbation_df.output_perturbation_std)
             else:
                 r2 = np.nan
                 mean_normalized_change = np.nan
