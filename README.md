@@ -235,3 +235,73 @@ results = joint_perturbed_run(
 
 print(results)
 ```
+
+### Using Constraints to Keep Values Within Physical Bounds
+
+The \`sensitivity_analysis\` and \`perturbed_run\` functions support optional \`input_min\` and \`input_max\` parameters to constrain perturbed values within physically meaningful ranges. This is useful when input variables have natural bounds (e.g., temperature > 0 Kelvin, probabilities between 0 and 1, concentrations ≥ 0).
+
+\`\`\`python
+import pandas as pd
+from monte_carlo_sensitivity import sensitivity_analysis
+
+# Example with a temperature variable that must stay positive
+input_df = pd.DataFrame({
+    "temperature": [250, 300, 350],  # Kelvin
+    "pressure": [101.3, 105.0, 110.0],  # kPa
+})
+
+def forward_process(df):
+    # Some model that depends on temperature and pressure
+    df["reaction_rate"] = df["temperature"] * 0.01 + df["pressure"] * 0.02
+    return df
+
+# Apply constraints so temperature stays positive and pressure stays in realistic range
+perturbation_df, sensitivity_metrics = sensitivity_analysis(
+    input_df=input_df,
+    input_variables=["temperature", "pressure"],
+    output_variables=["reaction_rate"],
+    forward_process=forward_process,
+    n=100,
+    perturbation_std=50.0,  # Large perturbations
+    input_min={"temperature": 0.0, "pressure": 0.0},  # Per-variable minimums
+    input_max={"temperature": 500.0, "pressure": 200.0}  # Per-variable maximums
+)
+
+# All perturbed temperature values will be clipped to [0, 500]
+# All perturbed pressure values will be clipped to [0, 200]
+\`\`\`
+
+**Constraint Options:**
+
+- **Scalar constraints** (apply to all variables):
+  \`\`\`python
+  sensitivity_analysis(..., input_min=0.0, input_max=100.0)
+  \`\`\`
+
+- **Per-variable constraints** (different bounds for each variable):
+  \`\`\`python
+  sensitivity_analysis(..., 
+      input_min={"var1": 0.0, "var2": -10.0}, 
+      input_max={"var1": 100.0, "var2": 50.0})
+  \`\`\`
+
+- **Partial constraints** (only constrain some variables):
+  \`\`\`python
+  sensitivity_analysis(..., 
+      input_min={"temperature": 0.0},  # Only temperature has a minimum
+      input_max=None)  # No maximum constraints
+  \`\`\`
+
+**Important Notes:**
+
+1. **Backward compatibility:** When constraints are not specified (default \`None\`), the behavior is identical to previous versions.
+
+2. **Implementation method:** Constraints are enforced using post-perturbation clipping. After generating random perturbations, values outside the specified bounds are clipped to the limits using \`numpy.clip()\`.
+
+3. **Statistical implications:** 
+   - When constraints are rarely hit (<5% of samples), the statistical properties of the analysis remain largely unaffected.
+   - When many samples hit the bounds, clipping introduces bias by truncating the distribution, which can reduce observed sensitivity.
+   - For cases where statistical rigor is critical and many samples would be clipped, consider reducing \`perturbation_std\` or implementing truncated distributions (future enhancement).
+
+4. **Actual perturbations:** After clipping, the actual applied perturbations are recalculated to match the clipped values, ensuring the \`input_perturbation\` column in results accurately reflects what was applied.
+

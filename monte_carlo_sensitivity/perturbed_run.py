@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Optional
 import logging
 
 import numpy as np
@@ -21,7 +21,9 @@ def perturbed_run(
         n: int = 100,
         perturbation_mean: float = 0,
         perturbation_std: float = None,
-        dropna: bool = True) -> pd.DataFrame:
+        dropna: bool = True,
+        input_min: Optional[float] = None,
+        input_max: Optional[float] = None) -> pd.DataFrame:
     """
     Perform a Monte Carlo sensitivity analysis by perturbing an input variable and observing the effect on an output variable.
 
@@ -36,6 +38,8 @@ def perturbed_run(
         perturbation_mean (float, optional): The mean of the perturbation distribution (default: 0).
         perturbation_std (float, optional): The standard deviation of the perturbation distribution (default: None, uses input variable's std).
         dropna (bool, optional): Whether to drop rows with NaN values in the results (default: True).
+        input_min (Optional[float], optional): Minimum allowed value for the input variable. Perturbed values below this will be clipped (default: None).
+        input_max (Optional[float], optional): Maximum allowed value for the input variable. Perturbed values above this will be clipped (default: None).
 
     Returns:
         pd.DataFrame: A DataFrame containing the results of the sensitivity analysis, including unperturbed and perturbed inputs and outputs.
@@ -51,6 +55,10 @@ def perturbed_run(
         - "output_perturbation": The perturbations observed in the output.
         - "output_perturbation_std": The normalized output perturbations.
         - "output_perturbed": The perturbed output values.
+    
+    Notes:
+        When input_min or input_max constraints are specified, perturbed values are clipped to stay within bounds.
+        The input_perturbation values in results reflect the actual applied perturbations after clipping.
     """
     logger.info("Starting Monte Carlo perturbed run")
 
@@ -110,7 +118,17 @@ def perturbed_run(
 
     logger.info("applying perturbations")
     # add perturbation to input
-    perturbed_input_df[input_variable] = perturbed_input_df[input_variable] + input_perturbation
+    perturbed_values = perturbed_input_df[input_variable] + input_perturbation
+    
+    # Apply constraints if specified
+    if input_min is not None or input_max is not None:
+        perturbed_values = np.clip(perturbed_values, input_min, input_max)
+        # Recalculate actual perturbations after clipping
+        input_perturbation = perturbed_values.values - unperturbed_input.values
+        # Recalculate normalized perturbations with actual (clipped) values
+        input_perturbation_std = normalization_function(input_perturbation, unperturbed_input)
+    
+    perturbed_input_df[input_variable] = perturbed_values
     # extract perturbed input
     perturbed_input = perturbed_input_df[input_variable]
 
