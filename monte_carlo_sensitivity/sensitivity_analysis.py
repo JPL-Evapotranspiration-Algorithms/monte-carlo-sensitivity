@@ -259,7 +259,11 @@ def _sensitivity_analysis_joint(
             valid_input = input_pert_std[valid_mask]
             valid_output = output_pert_std[valid_mask]
 
-            if len(valid_input) > 2:
+            # Guard pearsonr when either side is effectively constant
+            input_var = np.nanvar(valid_input) if len(valid_input) else np.nan
+            output_var = np.nanvar(valid_output) if len(valid_output) else np.nan
+
+            if len(valid_input) > 2 and input_var > 1e-10 and output_var > 1e-10:
                 correlation = mstats.pearsonr(valid_input, valid_output)[0]
             else:
                 correlation = np.nan
@@ -270,9 +274,6 @@ def _sensitivity_analysis_joint(
 
             # Calculate R² and mean normalized change using sanitized values
             if len(valid_input) >= 2:
-                input_var = np.nanvar(valid_input)
-                output_var = np.nanvar(valid_output)
-
                 if input_var > 1e-10 and output_var > 1e-10:
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
@@ -368,7 +369,11 @@ def _sensitivity_analysis_loop(
             valid_input = input_pert_std[valid_mask]
             valid_output = output_pert_std[valid_mask]
 
-            if len(valid_input) > 2:
+            # Guard pearsonr when either side is effectively constant
+            input_var = np.nanvar(valid_input) if len(valid_input) else np.nan
+            output_var = np.nanvar(valid_output) if len(valid_output) else np.nan
+
+            if len(valid_input) > 2 and input_var > 1e-10 and output_var > 1e-10:
                 correlation = mstats.pearsonr(valid_input, valid_output)[0]
             else:
                 correlation = np.nan
@@ -383,9 +388,6 @@ def _sensitivity_analysis_loop(
             # Suppress expected warnings for small samples
             # Check if there are enough valid data points for regression
             if len(valid_input) >= 2:
-                input_var = np.nanvar(valid_input)
-                output_var = np.nanvar(valid_output)
-
                 if input_var > 1e-10 and output_var > 1e-10:
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
